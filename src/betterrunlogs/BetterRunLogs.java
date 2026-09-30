@@ -69,6 +69,9 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
             lastDeck = new java.util.HashMap<>();
             lastStats = "";
             lastDiscovery = null;
+            lastRelics = null;
+            lastKeys = "";
+            lastNode = null;
         });
     }
 
@@ -178,9 +181,11 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
         }
         wasInRun = true;
         PotionLog.endFrame();
+        Choices.endFrame();
         watchScreen();
         watchDiscovery();
         watchDeckAndStats();
+        watchRelicsAndKeys();
         log().flush();
     }
 
@@ -193,7 +198,17 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
         lastScreenKey = key;
         JsonObject o = new JsonObject();
         o.add("where", Snap.where());
-        if (newRoom) o.add("state", Snap.full());
+        if (newRoom) {
+            o.add("state", Snap.full());
+            MapRoomNode now = AbstractDungeon.getCurrMapNode();
+            if (lastNode != null && now != null && now != lastNode && lastNode.y >= 0 && now.y == lastNode.y + 1) {
+                boolean pathed = lastNode.isConnectedTo(now);
+                o.addProperty("from_x", lastNode.x);
+                o.addProperty("from_y", lastNode.y);
+                if (!pathed) o.addProperty("flight", true);
+            }
+            lastNode = now;
+        }
         addScreenContents(o);
         log().emit(newRoom ? "room_enter" : "screen", o);
     }
@@ -224,6 +239,9 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
     private AbstractCard lastDiscovery;
     private java.util.Map<String, String> lastDeck = new java.util.HashMap<>();
     private String lastStats = "";
+    private java.util.List<String> lastRelics;
+    private String lastKeys = "";
+    private MapRoomNode lastNode;
 
     /** Also called as a screen closes, so a pick consumed within the same frame is not missed. */
     static void selectionsNow() {
@@ -286,6 +304,38 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
         }
     }
 
+    private static String relicKey(com.megacrit.cardcrawl.relics.AbstractRelic r) {
+        return r.relicId + "#" + r.counter + (r.grayscale ? "#used" : "");
+    }
+
+    /** Relics gained or lost and every counter/used-up change (Winged Boots, Pen Nib, Omamori, ...); act-4 keys. */
+    private void watchRelicsAndKeys() {
+        java.util.List<String> now = new java.util.ArrayList<>();
+        for (com.megacrit.cardcrawl.relics.AbstractRelic r : AbstractDungeon.player.relics) now.add(relicKey(r));
+        if (!now.equals(lastRelics)) {
+            if (lastRelics != null) {
+                JsonObject o = new JsonObject();
+                JsonArray before = new JsonArray();
+                for (String k : lastRelics) before.add(k);
+                o.add("before", before);
+                o.add("relics", Snap.relics());
+                log().emit("relic_change", o);
+            }
+            lastRelics = now;
+        }
+        String keys = (com.megacrit.cardcrawl.core.Settings.hasRubyKey ? "R" : "")
+                + (com.megacrit.cardcrawl.core.Settings.hasEmeraldKey ? "E" : "")
+                + (com.megacrit.cardcrawl.core.Settings.hasSapphireKey ? "S" : "");
+        if (!keys.equals(lastKeys)) {
+            JsonObject o = new JsonObject();
+            o.addProperty("ruby", com.megacrit.cardcrawl.core.Settings.hasRubyKey);
+            o.addProperty("emerald", com.megacrit.cardcrawl.core.Settings.hasEmeraldKey);
+            o.addProperty("sapphire", com.megacrit.cardcrawl.core.Settings.hasSapphireKey);
+            log().emit("keys", o);
+            lastKeys = keys;
+        }
+    }
+
     private void watchSelections() {
         String grid = uuids(AbstractDungeon.gridSelectScreen.selectedCards);
         if (!grid.equals(lastGridPick)) {
@@ -344,7 +394,7 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
     }
 
     @SuppressWarnings("unchecked")
-    private static JsonObject shop(ShopScreen s) {
+    static JsonObject shop(ShopScreen s) {
         JsonObject o = new JsonObject();
         JsonArray cs = new JsonArray();
         for (List<AbstractCard> group : java.util.Arrays.asList(s.coloredCards, s.colorlessCards)) {
@@ -362,6 +412,7 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
                 JsonObject ro = new JsonObject();
                 ro.addProperty("id", r.relic.relicId);
                 ro.addProperty("price", r.price);
+                if (r.isPurchased) ro.addProperty("bought", true);
                 rs.add(ro);
             }
         }
@@ -373,11 +424,13 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
                 JsonObject po = new JsonObject();
                 po.addProperty("id", p.potion.ID);
                 po.addProperty("price", p.price);
+                if (p.isPurchased) po.addProperty("bought", true);
                 ps.add(po);
             }
         }
         o.add("potions", ps);
         o.addProperty("purgeCost", ShopScreen.actualPurgeCost);
+        o.addProperty("purgeAvailable", s.purgeAvailable);
         return o;
     }
 

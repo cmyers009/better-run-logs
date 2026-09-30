@@ -6,8 +6,19 @@ A Slay the Spire mod that records **everything** about a run, well beyond the ga
 - every game action executed, every draw, exhaust, end of turn and monster turn
 - every monster move roll and intent
 - every potion **use** (with its target and what triggered it) kept separate from potion **discards**
-- every event option, card reward pick/skip, hand/grid/Discovery selection, room entered
-- deck, gold, HP and max-HP changes, relics and potions gained
+- every event choice, with all the options offered (including disabled ones and the card/relic
+  they preview)
+- card reward picks and skips, and Discovery picks with the cards offered
+- hand and grid selections (Armaments, smith, remove, transform, Pandora's Box, bottles, ...)
+- every shop's full stock with prices, and every purchase and card removal with the price paid
+  and the full shop afterwards (so restocks show up, bought or not)
+- every reward claimed from the rewards screen (gold, relic, potion, card, key)
+- every campfire choice (Rest, Smith, Recall, Dig, Lift, Toke, and modded options)
+- every room entered with its map position, including Winged Boots flights
+- every relic gained or lost and every relic counter change (Pen Nib, Nunchaku, Winged Boots, ...)
+- act-4 keys, deck changes, gold, HP and max-HP changes, potions gained
+- the player's name and the seed
+- a full copy of the game's own `.run` data at the end, so this one file is all you need
 - the state of **every RNG stream** (the 13 dungeon streams, Neow's, and libgdx `MathUtils`) whenever it changes
 - a full game-state snapshot at the start of the run, every act, every room and every player turn
 
@@ -84,8 +95,8 @@ things happened. Every line has:
 - `floor`: the current floor
 - `rng_d`: the RNG streams that changed since the previous line, as `[counter, state0, state1]`
 
-The first line (`run_start`) has the seed, character, ascension, game version and full starting
-state. A `resume` line marks each Save & Quit reload.
+The first line (`run_start`) has the player name, seed, character, ascension, game version and
+full starting state. The last line (`run_end`) has the final state and the complete `.run` data. A `resume` line marks each Save & Quit reload.
 
 Open a log on any system with a tool that reads gzip, or on Linux/macOS with
 `zcat <file>.jsonl.gz | less`.
@@ -104,5 +115,3 @@ STEAM=/path/to/steamapps ./build.sh   # writes better-run-logs.jar
 ## Known limits
 
 - Randomness that another mod keeps in its own RNG is not captured.
-- Shop purchases, campfire choices and reward pickups show up through their effects (gold, deck,
-  HP, relic and potion changes), not yet as their own lines.

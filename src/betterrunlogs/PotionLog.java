@@ -13,21 +13,9 @@ import com.megacrit.cardcrawl.potions.PotionSlot;
 import com.megacrit.cardcrawl.rooms.AbstractRoom;
 import com.megacrit.cardcrawl.ui.panels.PotionPopUp;
 import com.megacrit.cardcrawl.ui.panels.TopPanel;
-import com.evacipated.cardcrawl.modthespire.Loader;
-import com.evacipated.cardcrawl.modthespire.ModInfo;
 import com.evacipated.cardcrawl.modthespire.lib.SpireRawPatch;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
 import javassist.CannotCompileException;
-import javassist.ClassPool;
 import javassist.CtBehavior;
-import javassist.CtClass;
-import javassist.CtMethod;
-import javassist.Modifier;
 import javassist.NotFoundException;
 import javassist.expr.ExprEditor;
 import javassist.expr.MethodCall;
@@ -82,49 +70,9 @@ public final class PotionLog {
     public static class EveryPotionUse {
         @SpireRawPatch
         public static void Raw(CtBehavior host) throws NotFoundException, CannotCompileException {
-            ClassPool pool = host.getDeclaringClass().getClassPool();
-            CtClass base = pool.get(AbstractPotion.class.getName());
-            CtClass[] sig = {pool.get(AbstractCreature.class.getName())};
-            List<String> jars = new ArrayList<>();
-            jars.add(Loader.STS_JAR);
-            for (ModInfo m : Loader.MODINFOS) if (m.jarURL != null) jars.add(m.jarURL.getPath());
-            int patched = 0;
-            for (String name : classNames(jars)) {
-                CtClass cc;
-                try {
-                    cc = pool.get(name);
-                    if (cc == base || !cc.subclassOf(base)) continue;
-                } catch (NotFoundException | RuntimeException e) { // LOUD-OK: unrelated class with missing deps
-                    continue;
-                }
-                CtMethod use;
-                try {
-                    use = cc.getDeclaredMethod("use", sig);
-                } catch (NotFoundException e) { // LOUD-OK: inherits use() from a patched parent
-                    continue;
-                }
-                if (Modifier.isAbstract(use.getModifiers())) continue;
-                use.insertBefore("betterrunlogs.PotionLog.used(this, $1);");
-                patched++;
-            }
-            System.out.println("[BetterRunLogs] potion use() hooked in " + patched + " classes");
+            SubclassHooks.insertBefore(host.getDeclaringClass().getClassPool(), AbstractPotion.class, "use",
+                    new Class<?>[] {AbstractCreature.class}, "betterrunlogs.PotionLog.used(this, $1);");
         }
-    }
-
-    private static List<String> classNames(List<String> jars) {
-        List<String> names = new ArrayList<>();
-        for (String path : jars) {
-            try (JarFile jar = new JarFile(java.net.URLDecoder.decode(path, "UTF-8"))) {
-                Enumeration<JarEntry> e = jar.entries();
-                while (e.hasMoreElements()) {
-                    String n = e.nextElement().getName();
-                    if (n.endsWith(".class") && !n.contains("$")) names.add(n.substring(0, n.length() - 6).replace('/', '.'));
-                }
-            } catch (IOException e) {
-                System.err.println("[BetterRunLogs] cannot scan " + path + " for potions: " + e);
-            }
-        }
-        return names;
     }
 
     private static ExprEditor hookUse(String how) {

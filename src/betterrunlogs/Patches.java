@@ -1,9 +1,20 @@
 package betterrunlogs;
 
+import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePrefixPatch;
 import com.google.gson.JsonObject;
+import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.InputStreamReader;
+import java.io.FileInputStream;
+import com.megacrit.cardcrawl.ui.buttons.LargeDialogOptionButton;
+import com.megacrit.cardcrawl.relics.AbstractRelic;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonArray;
 import com.megacrit.cardcrawl.actions.AbstractGameAction;
 import com.megacrit.cardcrawl.actions.GameActionManager;
 import com.megacrit.cardcrawl.cards.AbstractCard;
@@ -115,8 +126,28 @@ public final class Patches {
             o.addProperty("option", option);
             AbstractRoom room = Snap.room();
             if (room != null && room.event != null) o.addProperty("event", room.event.getClass().getName());
+            List<LargeDialogOptionButton> buttons = dialog.equals("room") ? RoomEventDialog.optionList
+                    : room != null && room.event != null && room.event.imageEventText != null
+                    ? room.event.imageEventText.optionList : null;
+            if (buttons != null) {
+                JsonArray opts = new JsonArray();
+                for (LargeDialogOptionButton b : buttons) opts.add(eventOption(b));
+                o.add("options", opts);
+                if (option < buttons.size()) o.addProperty("text", buttons.get(option).msg);
+            }
             RunLog.get().emit("event_choice", o);
         });
+    }
+
+    private static JsonObject eventOption(LargeDialogOptionButton b) {
+        JsonObject o = new JsonObject();
+        o.addProperty("text", b.msg);
+        o.addProperty("disabled", b.isDisabled);
+        Object card = Snap.privateField(b, LargeDialogOptionButton.class, "cardToPreview");
+        if (card != null) o.add("card", Snap.card((AbstractCard) card));
+        Object relic = Snap.privateField(b, LargeDialogOptionButton.class, "relicToPreview");
+        if (relic != null) o.addProperty("relic", ((AbstractRelic) relic).relicId);
+        return o;
     }
 
     @SpirePatch(clz = GenericEventDialog.class, method = "getSelectedOption")
@@ -181,7 +212,10 @@ public final class Patches {
                 String id = RunLog.get().runId();
                 if (id == null) return;
                 Object params = Snap.privateField(__instance, Metrics.class, "params");
-                if (params != null) ((HashMap<Object, Object>) params).put("better_run_log_id", id);
+                if (params == null) return;
+                HashMap<Object, Object> m = (HashMap<Object, Object>) params;
+                m.put("better_run_log_id", id);
+                m.put("better_run_log_player", CardCrawlGame.playerName);
             });
         }
     }
@@ -193,12 +227,20 @@ public final class Patches {
         public static void Postfix(Metrics __instance, boolean death, boolean trueVictor, MonsterGroup monsters) {
             if (!death && !trueVictor) return;
             RunLog.guard("runEnd", () -> {
+                File newest = newestRunFile(new File("runs"));
                 JsonObject o = new JsonObject();
                 o.addProperty("death", death);
                 o.addProperty("victory", trueVictor);
                 o.add("state", Snap.full());
+                if (newest != null) {
+                    o.addProperty("run_file", newest.getParentFile().getName() + "/" + newest.getName());
+                    try (Reader r = new InputStreamReader(new FileInputStream(newest), StandardCharsets.UTF_8)) {
+                        o.add("run_data", new JsonParser().parse(r));
+                    } catch (IOException | RuntimeException e) {
+                        o.addProperty("run_data_error", String.valueOf(e));
+                    }
+                }
                 RunLog.get().emit("run_end", o);
-                File newest = newestRunFile(new File("runs"));
                 if (newest == null) {
                     System.err.println("[BetterRunLogs] no .run file found; raw log left in better-run-logs/inprogress");
                     RunLog.get().suspend();
