@@ -13,7 +13,7 @@ A Slay the Spire mod that records **everything** about a run, well beyond the ga
 
 It does not change gameplay and works with any character, including modded ones.
 
-Logs can be replayed with [better-run-logs-replayer](../better-run-logs-replayer).
+Logs can be replayed with [better-run-logs-replayer](https://github.com/cmyers009/better-run-logs-replayer).
 
 ## Install
 
