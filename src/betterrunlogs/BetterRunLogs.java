@@ -41,7 +41,6 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
 
     private String lastScreenKey = "";
     private String lastGridPick = "";
-    private String lastHandPick = "";
     private boolean wasInRun;
 
     public static void initialize() {
@@ -77,14 +76,15 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
 
     @Override
     public void receiveStartAct() {
-        RunLog.guard("startAct", () -> {
+        // BaseMod fires this at the end of AbstractDungeon's constructor, before the act's own constructor builds its map.
+        log().defer(() -> RunLog.guard("startAct", () -> {
             JsonObject o = with("state", Snap.full());
             o.addProperty("boss", AbstractDungeon.bossKey);
             o.add("bossList", strings(AbstractDungeon.bossList));
             o.add("map", map());
             log().emit("act_start", o);
             log().flush();
-        });
+        }));
     }
 
     @Override
@@ -169,7 +169,10 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
 
     @Override
     public void receivePostUpdate() {
-        RunLog.guard("postUpdate", this::postUpdate);
+        RunLog.guard("postUpdate", () -> {
+            log().runDeferred();
+            postUpdate();
+        });
     }
 
     private void postUpdate() {
@@ -341,11 +344,6 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
         if (!grid.equals(lastGridPick)) {
             lastGridPick = grid;
             if (!grid.isEmpty()) log().emit("grid_select", with("picked", wrap(cards(AbstractDungeon.gridSelectScreen.selectedCards))));
-        }
-        String hand = uuids(AbstractDungeon.handCardSelectScreen.selectedCards.group);
-        if (!hand.equals(lastHandPick)) {
-            lastHandPick = hand;
-            if (!hand.isEmpty()) log().emit("hand_select", with("picked", wrap(cards(AbstractDungeon.handCardSelectScreen.selectedCards.group))));
         }
     }
 

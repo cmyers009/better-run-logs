@@ -30,6 +30,7 @@ final class RunLog {
     private static final File INPROGRESS = new File("better-run-logs/inprogress");
     private static final File ORPHANED = new File("better-run-logs/unfinished");
     private static final Gson GSON = new Gson();
+    private Runnable deferred;
 
     private static final RunLog INSTANCE = new RunLog();
 
@@ -121,6 +122,7 @@ final class RunLog {
 
     synchronized void begin(boolean resumed) {
         closeQuietly();
+        deferred = null;
         String character = String.valueOf(AbstractDungeon.player.chosenClass);
         File f = fileFor(character, Settings.seed);
         if (!INPROGRESS.isDirectory() && !INPROGRESS.mkdirs()) {
@@ -141,6 +143,7 @@ final class RunLog {
         seq = 0;
         lastCounters.clear();
         lastRngObjects.clear();
+        Snap.markLeftoverRngs(!resumed);
         JsonObject o = new JsonObject();
         o.addProperty("format", FORMAT_VERSION);
         o.addProperty("run_id", runId);
@@ -152,6 +155,7 @@ final class RunLog {
         o.addProperty("daily", Settings.isDailyRun);
         o.addProperty("trial", Settings.isTrial);
         o.addProperty("endless", Settings.isEndless);
+        o.addProperty("final_act", Settings.isFinalActAvailable);
         o.addProperty("game_version", CardCrawlGame.TRUE_VERSION_NUM);
         o.addProperty("log_version", modVersion());
         o.add("profile", profile(character));
@@ -201,8 +205,20 @@ final class RunLog {
         }
     }
 
+    /** Runs a line deferred until the game finishes what it was building, ahead of any later line. */
+    synchronized void defer(Runnable line) {
+        deferred = line;
+    }
+
+    synchronized void runDeferred() {
+        Runnable r = deferred;
+        deferred = null;
+        if (r != null) r.run();
+    }
+
     synchronized void emit(String type, JsonObject body) {
         if (out == null) return;
+        runDeferred();
         body.addProperty("t", type);
         body.addProperty("seq", seq++);
         body.addProperty("floor", AbstractDungeon.floorNum);

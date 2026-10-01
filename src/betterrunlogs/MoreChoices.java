@@ -85,14 +85,14 @@ public final class MoreChoices {
         return (Integer) Snap.privateField(g, GremlinMatchGame.class, name);
     }
 
-    /** A flip is a card turning face up; a pair resolves (after its delay) when attemptCount drops. */
+    /** A flip is a card turning face up (the game's isFlipped means face DOWN); a pair resolves (after its delay) when attemptCount drops. */
     @SpirePatch(clz = GremlinMatchGame.class, method = "updateMatchGameLogic")
     public static class MatchFlip {
         @SpirePrefixPatch
         public static void Prefix(GremlinMatchGame __instance) {
             RunLog.guard("matchFlipBefore", () -> {
                 faceUpBefore.clear();
-                for (AbstractCard c : board(__instance).group) if (c.isFlipped) faceUpBefore.add(c.uuid);
+                for (AbstractCard c : board(__instance).group) if (!c.isFlipped) faceUpBefore.add(c.uuid);
                 attemptsBefore = intField(__instance, "attemptCount");
                 matchedBefore = intField(__instance, "cardsMatched");
             });
@@ -102,7 +102,7 @@ public final class MoreChoices {
         public static void Postfix(GremlinMatchGame __instance) {
             RunLog.guard("matchFlip", () -> {
                 for (AbstractCard c : board(__instance).group) {
-                    if (!c.isFlipped || faceUpBefore.contains(c.uuid)) continue;
+                    if (c.isFlipped || faceUpBefore.contains(c.uuid)) continue;
                     JsonObject o = Snap.card(c);
                     Integer pos = positions.get(c.uuid);
                     if (pos != null) o.addProperty("position", pos);

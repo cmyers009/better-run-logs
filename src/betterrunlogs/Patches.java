@@ -89,10 +89,27 @@ public final class Patches {
         }
     }
 
-    @SpirePatch(clz = AbstractRoom.class, method = "endTurn")
+    /** Every hand selection closes here with its picks still held, including a one-card pick that confirms on the click. */
+    @SpirePatch(clz = AbstractDungeon.class, method = "closeCurrentScreen")
+    public static class HandSelectClosed {
+        @SpirePrefixPatch
+        public static void Prefix() {
+            if (AbstractDungeon.screen != AbstractDungeon.CurrentScreen.HAND_SELECT) return;
+            RunLog.guard("handSelect", () -> {
+                JsonObject picked = new JsonObject();
+                picked.add("cards", Snap.pile(AbstractDungeon.handCardSelectScreen.selectedCards));
+                JsonObject o = new JsonObject();
+                o.add("picked", picked);
+                RunLog.get().emit("hand_select", o);
+            });
+        }
+    }
+
+    /** The player's end-turn input; AbstractRoom.endTurn never runs when an end-of-turn effect (an orb, a power) ends the combat. */
+    @SpirePatch(clz = GameActionManager.class, method = "callEndOfTurnActions")
     public static class EndTurn {
         @SpirePrefixPatch
-        public static void Prefix(AbstractRoom __instance) {
+        public static void Prefix(GameActionManager __instance) {
             RunLog.guard("endTurn", () -> {
                 JsonObject o = new JsonObject();
                 o.add("hand", Snap.pile(AbstractDungeon.player.hand));
@@ -111,8 +128,7 @@ public final class Patches {
                 JsonObject o = new JsonObject();
                 o.addProperty("i", monsterIndex(__instance));
                 o.addProperty("id", __instance.id);
-                o.addProperty("move", __instance.nextMove);
-                o.addProperty("intent", String.valueOf(__instance.intent));
+                Snap.rolledMove(o, __instance);
                 RunLog.get().emit("monster_roll", o);
             });
         }

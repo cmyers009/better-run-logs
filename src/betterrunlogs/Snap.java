@@ -10,6 +10,7 @@ import com.megacrit.cardcrawl.core.AbstractCreature;
 import com.megacrit.cardcrawl.core.Settings;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
+import com.megacrit.cardcrawl.monsters.EnemyMoveInfo;
 import com.megacrit.cardcrawl.neow.NeowEvent;
 import com.megacrit.cardcrawl.orbs.AbstractOrb;
 import com.megacrit.cardcrawl.potions.AbstractPotion;
@@ -23,6 +24,16 @@ import java.util.Map;
 /** Game-state to JSON. Read-only: nothing here may advance an RNG or mutate state. */
 final class Snap {
     private Snap() {}
+
+    /** The map and Neow RNGs a new run inherits from the last one until its act and Neow replace them. */
+    private static final java.util.Set<Random> leftover = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+
+    static void markLeftoverRngs(boolean newRun) {
+        leftover.clear();
+        if (!newRun) return;
+        if (AbstractDungeon.mapRng != null) leftover.add(AbstractDungeon.mapRng);
+        if (NeowEvent.rng != null) leftover.add(NeowEvent.rng);
+    }
 
     static Map<String, Random> gameRngs() {
         Map<String, Random> m = new LinkedHashMap<>();
@@ -40,6 +51,7 @@ final class Snap {
         m.put("cardRandom", AbstractDungeon.cardRandomRng);
         m.put("misc", AbstractDungeon.miscRng);
         m.put("neow", NeowEvent.rng);
+        m.values().removeIf(leftover::contains);
         return m;
     }
 
@@ -107,12 +119,7 @@ final class Snap {
         o.addProperty("hp", m.currentHealth);
         o.addProperty("maxHp", m.maxHealth);
         o.addProperty("block", m.currentBlock);
-        o.addProperty("move", m.nextMove);
-        o.addProperty("intent", String.valueOf(m.intent));
-        Object dmg = privateField(m, AbstractMonster.class, "intentDmg");
-        Object multi = privateField(m, AbstractMonster.class, "intentMultiAmt");
-        if (dmg != null) o.addProperty("intentDmg", (Integer) dmg);
-        if (multi != null) o.addProperty("intentMulti", (Integer) multi);
+        rolledMove(o, m);
         JsonArray hist = new JsonArray();
         for (Byte b : m.moveHistory) hist.add(b);
         o.add("moveHistory", hist);
@@ -215,8 +222,22 @@ final class Snap {
             o.addProperty("phase", String.valueOf(room().phase));
         }
         o.addProperty("screen", String.valueOf(AbstractDungeon.screen));
-        if (AbstractDungeon.actionManager != null) o.addProperty("turn", AbstractDungeon.actionManager.turn);
+        if (AbstractDungeon.actionManager != null && inCombat()) o.addProperty("turn", AbstractDungeon.actionManager.turn);
         return o;
+    }
+
+    /** The move rollMove chose. The intent fields lag it until the intent is shown, which waits on battle-start effects. */
+    static void rolledMove(JsonObject o, AbstractMonster m) {
+        EnemyMoveInfo move = (EnemyMoveInfo) privateField(m, AbstractMonster.class, "move");
+        if (move == null) {
+            o.addProperty("move", m.nextMove);
+            o.addProperty("intent", String.valueOf(m.intent));
+            return;
+        }
+        o.addProperty("move", move.nextMove);
+        o.addProperty("intent", String.valueOf(move.intent));
+        if (move.baseDamage >= 0) o.addProperty("baseDmg", move.baseDamage);
+        if (move.isMultiDamage) o.addProperty("hits", move.multiplier);
     }
 
     static boolean inCombat() {
