@@ -106,6 +106,12 @@ full starting state. The last line (`run_end`) has the final state and the compl
 Open a log on any system with a tool that reads gzip, or on Linux/macOS with
 `zcat <file>.jsonl.gz | less`.
 
+## Checking a log
+
+`python3 tools/audit.py <log>` rebuilds the deck, gold, max HP, relics and between-room HP from
+the log's event lines and compares them with every full-state snapshot in the log. Any mismatch
+means an event is missing or wrong.
+
 ## Building from source
 
 Needs a JDK (11 or newer, to compile for Java 8) and the game, ModTheSpire and BaseMod installed
