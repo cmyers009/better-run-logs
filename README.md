@@ -13,6 +13,10 @@ A Slay the Spire mod that records **everything** about a run, well beyond the ga
 - every shop's full stock with prices, and every purchase and card removal with the price paid
   and the full shop afterwards (so restocks show up, bought or not)
 - every reward claimed from the rewards screen (gold, relic, potion, card, key)
+- boss relic picks and skips, with the relics offered
+- every Match and Keep flip and whether each pair matched
+- turns ended by the game rather than the player (Time Eater's Time Warp), kept separate from
+  the player's own end turn
 - every campfire choice (Rest, Smith, Recall, Dig, Lift, Toke, and modded options)
 - every room entered with its map position, including Winged Boots flights
 - every relic gained or lost and every relic counter change (Pen Nib, Nunchaku, Winged Boots, ...)
@@ -95,7 +99,8 @@ things happened. Every line has:
 - `floor`: the current floor
 - `rng_d`: the RNG streams that changed since the previous line, as `[counter, state0, state1]`
 
-The first line (`run_start`) has the player name, seed, character, ascension, game version and
+The first line (`run_start`) has the player name, seed, character, ascension, game version,
+`log_version` (the version of this mod that wrote the log), the installed mods and unlocks, and the
 full starting state. The last line (`run_end`) has the final state and the complete `.run` data. A `resume` line marks each Save & Quit reload.
 
 Open a log on any system with a tool that reads gzip, or on Linux/macOS with

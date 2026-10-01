@@ -92,6 +92,33 @@ final class RunLog {
     }
 
     /** Called on every game start: a fresh run rotates any stale file for the same seed. */
+    /** Everything outside the seed that decides what the run offers, so a replay can reproduce it. */
+    /** This mod's version from ModTheSpire.json, so a reader knows which format and fixes a log has. */
+    static String modVersion() {
+        for (com.evacipated.cardcrawl.modthespire.ModInfo m : com.evacipated.cardcrawl.modthespire.Loader.MODINFOS) {
+            if ("better-run-logs".equals(m.ID)) return String.valueOf(m.ModVersion);
+        }
+        return "unknown";
+    }
+
+    private static JsonObject profile(String character) {
+        JsonObject p = new JsonObject();
+        p.addProperty("seed_set", Settings.seedSet);
+        p.addProperty("neow_spirits", CardCrawlGame.playerPref.getInteger(character + "_SPIRITS", 0));
+        JsonArray cards = new JsonArray();
+        for (String id : com.megacrit.cardcrawl.unlock.UnlockTracker.lockedCards) cards.add(id);
+        p.add("locked_cards", cards);
+        JsonArray relics = new JsonArray();
+        for (String id : com.megacrit.cardcrawl.unlock.UnlockTracker.lockedRelics) relics.add(id);
+        p.add("locked_relics", relics);
+        JsonArray mods = new JsonArray();
+        for (com.evacipated.cardcrawl.modthespire.ModInfo m : com.evacipated.cardcrawl.modthespire.Loader.MODINFOS) {
+            mods.add(m.ID + (m.ModVersion == null ? "" : "@" + m.ModVersion));
+        }
+        p.add("mods", mods);
+        return p;
+    }
+
     synchronized void begin(boolean resumed) {
         closeQuietly();
         String character = String.valueOf(AbstractDungeon.player.chosenClass);
@@ -126,6 +153,8 @@ final class RunLog {
         o.addProperty("trial", Settings.isTrial);
         o.addProperty("endless", Settings.isEndless);
         o.addProperty("game_version", CardCrawlGame.TRUE_VERSION_NUM);
+        o.addProperty("log_version", modVersion());
+        o.add("profile", profile(character));
         o.addProperty("playtime", CardCrawlGame.playtime);
         o.addProperty("wallclock_ms", System.currentTimeMillis());
         o.add("state", Snap.full());
