@@ -1,9 +1,9 @@
 {
   "steamPublishedID": "3811056891",
   "title": "Better Run Logs",
-  "description": "Records everything about a run in one file: every card played (with target), every potion use and discard, every event option offered and chosen, card rewards, Discovery picks, shop stock and prices, purchases and removals, campfire choices, reward pickups, relic counters, keys, map path (including Winged Boots flights), and the state of every RNG stream.\n\nLogs are saved in your game folder under better-run-logs/\u003cCHARACTER\u003e/\u003ctimestamp\u003e.jsonl.gz. Each one also contains the game\u0027s own .run data, so it\u0027s the only file you need.\n\nDoes not change gameplay. Works with any character, including modded ones. Requires BaseMod.\n\nSource, log format and full docs: https://github.com/cmyers009/better-run-logs",
+  "description": "Records everything about a run in one file: every card played (with target), every potion use and discard, every event option offered and chosen, card rewards, Discovery picks, shop stock and prices, purchases and removals, campfire choices, reward pickups, relic counters, keys, map path (including Winged Boots flights), and the state of every RNG stream.\n\nLogs are saved in your game folder under better-run-logs/<CHARACTER>/<timestamp>.jsonl.gz. Each one also contains the game's own .run data, so it's the only file you need.\n\nDoes not change gameplay. Works with any character, including modded ones. Requires BaseMod.\n\nSource, log format and full docs: https://github.com/cmyers009/better-run-logs",
   "visibility": "private",
-  "changeNote": "0.1.0",
+  "changeNote": "0.2.0: logs forced end-turns (Time Warp), boss relic picks/skips, Match and Keep flips, and the mod version",
   "tags": [
     "utility"
   ]
