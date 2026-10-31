@@ -6,6 +6,7 @@ import basemod.interfaces.OnStartBattleSubscriber;
 import basemod.interfaces.PostBattleSubscriber;
 import basemod.interfaces.PostDeathSubscriber;
 import basemod.interfaces.PostDrawSubscriber;
+import basemod.interfaces.PostInitializeSubscriber;
 import basemod.interfaces.PostExhaustSubscriber;
 import basemod.interfaces.PostUpdateSubscriber;
 import basemod.interfaces.PotionGetSubscriber;
@@ -19,6 +20,7 @@ import com.evacipated.cardcrawl.modthespire.lib.SpireInitializer;
 import com.megacrit.cardcrawl.cards.AbstractCard;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
+import com.megacrit.cardcrawl.helpers.ImageMaster;
 import com.megacrit.cardcrawl.map.MapEdge;
 import com.megacrit.cardcrawl.map.MapRoomNode;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
@@ -37,7 +39,7 @@ import java.util.List;
 public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, OnStartBattleSubscriber,
         PostBattleSubscriber, OnPlayerTurnStartPostDrawSubscriber, PreMonsterTurnSubscriber, PostDrawSubscriber,
         PostExhaustSubscriber, PotionGetSubscriber, RelicGetSubscriber, PostDeathSubscriber,
-        PostUpdateSubscriber {
+        PostUpdateSubscriber, PostInitializeSubscriber {
 
     private String lastScreenKey = "";
     private String lastGridPick = "";
@@ -47,6 +49,22 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
         instance = new BetterRunLogs();
         BaseMod.subscribe(instance);
         System.out.println("[BetterRunLogs] initialized");
+    }
+
+    /** The stored upload choice, then the Config panel that shows it; a broken panel never takes the log down with it. */
+    @Override
+    public void receivePostInitialize() {
+        try {
+            Consent.init();
+        } catch (Throwable t) { // LOUD-OK: uploads stay off; logging keeps running
+            System.err.println("[BetterRunLogs] upload setup failed; uploads stay off: " + t);
+        }
+        try {
+            BaseMod.registerModBadge(ImageMaster.loadImage("img/BaseModBadge.png"), "Better Run Logs", "Cooper Myers",
+                    "Records every run to better-run-logs/. Optional: share runs with spirepilot.com.", SettingsPanel.build());
+        } catch (Throwable t) { // LOUD-OK: no Config panel; logging and the consent prompt still work
+            System.err.println("[BetterRunLogs] could not register the Config panel: " + t);
+        }
     }
 
     private static RunLog log() {

@@ -16,6 +16,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -268,11 +270,16 @@ final class RunLog {
         File dir = new File("better-run-logs", runFile.getParentFile().getName());
         dir.mkdirs();
         File dest = new File(dir, base + ".jsonl.gz");
-        try (InputStream in = new FileInputStream(file);
-                OutputStream gz = new GZIPOutputStream(new FileOutputStream(dest))) {
-            byte[] buf = new byte[1 << 16];
-            int n;
-            while ((n = in.read(buf)) > 0) gz.write(buf, 0, n);
+        File tmp = new File(dir, base + ".jsonl.gz.tmp");
+        try {
+            try (InputStream in = new FileInputStream(file);
+                    OutputStream gz = new GZIPOutputStream(new FileOutputStream(tmp))) {
+                byte[] buf = new byte[1 << 16];
+                int n;
+                while ((n = in.read(buf)) > 0) gz.write(buf, 0, n);
+            }
+            // The uploader scans *.jsonl.gz: a log appears there only once it is whole.
+            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             System.err.println("[BetterRunLogs] could not write " + dest + " (raw log kept at " + file + "): " + e);
             return;
@@ -281,5 +288,10 @@ final class RunLog {
         System.out.println("[BetterRunLogs] wrote " + dest.getAbsolutePath());
         file = null;
         runId = null;
+        try {
+            Uploader.offer(dest);
+        } catch (Throwable t) { // LOUD-OK: the next launch's backfill uploads it
+            System.err.println("[BetterRunLogs] could not queue " + dest + " for upload: " + t);
+        }
     }
 }

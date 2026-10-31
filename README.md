@@ -30,6 +30,34 @@ It does not change gameplay and works with any character, including modded ones.
 
 Logs can be replayed with [better-run-logs-replayer](https://github.com/cmyers009/better-run-logs-replayer).
 
+## Sharing your runs (optional) and privacy
+
+On first launch of 0.3.0 the main menu asks once: **Share your runs with spirepilot.com?**
+Nothing is sent anywhere unless you answer yes. Closing the prompt with Escape just asks again next
+launch.
+
+If you say yes:
+
+- Each finished run's log (`better-run-logs/<CHARACTER>/*.jsonl.gz`, exactly the file on your PC) is
+  uploaded to `api.spirepilot.com` in the background. The logs already there are uploaded too.
+  Unfinished runs (`inprogress/`, `unfinished/`) are never uploaded.
+- Each upload carries a random install ID made on your PC (not tied to your Steam account) and the
+  mod version.
+- The logs are used to train a Slay the Spire AI.
+- spirepilot.com shows your stats and the bot's review of your Heart fights under your Steam name
+  (the player name inside the log).
+- Uploading never moves or deletes the logs on your PC.
+
+Change your mind any time in **Mods → Better Run Logs → Config**:
+
+- **Share runs with spirepilot.com** turns uploading on or off.
+- **View my stats** opens your page on spirepilot.com.
+- **Remove my runs from the site** turns sharing off and hides every run uploaded from this install
+  from spirepilot.com.
+
+The choice and install ID live in ModTheSpire's config for this mod; `better-run-logs/uploaded.ledger`
+lists which logs were already sent.
+
 ## Install
 
 You need the Steam version of Slay the Spire.
@@ -119,9 +147,10 @@ through Steam:
 
 ```sh
 STEAM=/path/to/steamapps ./build.sh   # writes better-run-logs.jar
+./build.sh test                        # runs the upload-plan tests (no game needed)
 ```
 
-`STEAM` defaults to `~/.local/share/Steam/steamapps`.
+`STEAM` defaults to `~/.local/share/Steam/steamapps`, then the Snap Steam folder.
 
 ## Known limits
 
