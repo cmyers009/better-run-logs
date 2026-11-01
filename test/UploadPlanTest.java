@@ -82,7 +82,8 @@ public final class UploadPlanTest {
     }
 
     private static void logChecks() throws IOException {
-        String start = "{\"run_id\":\"x\",\"t\":\"run_start\",\"seq\":0}\n";
+        String start = "{\"run_id\":\"x\",\"player_name\":\"Panacea\",\"t\":\"run_start\",\"seq\":0}\n";
+        String nameless = "{\"run_id\":\"x\",\"t\":\"run_start\",\"seq\":0}\n";
         String mid = "{\"t\":\"turn_start\",\"seq\":1}\n";
         String end = "{\"victory\":true,\"t\":\"run_end\",\"seq\":2}\n";
         assert problem(gz(start + mid + end), 1 << 20) == null;
@@ -90,6 +91,10 @@ public final class UploadPlanTest {
         assert problem(gz(start + mid), 1 << 20).equals("no run_end line");
         assert problem(gz(mid + end), 1 << 20).equals("first line is not run_start");
         assert problem(gz(""), 1 << 20).equals("empty log");
+        assert UploadPlan.serverBehind(422, "{\"error\":\"unknown log_version 0.3.1\"}");
+        assert !UploadPlan.serverBehind(422, "{\"error\":\"unparseable: run_start.player_name\"}");
+        assert !UploadPlan.serverBehind(200, "unknown log_version");
+        assert problem(gz(nameless + mid + end), 1 << 20).startsWith("no Steam name");
         byte[] full = gz(start + mid + end);
         assert problem(Arrays.copyOf(full, full.length - 6), 1 << 20).startsWith("unreadable gzip");
         assert problem("not gzip".getBytes(StandardCharsets.UTF_8), 1 << 20).startsWith("unreadable gzip");

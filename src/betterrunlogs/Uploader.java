@@ -126,6 +126,7 @@ public final class Uploader {
         Set<String> ledger = new HashSet<>();
         int failures;
         int uploaded;
+        String lastReply = "";
 
         Worker(String installId) {
             this.installId = installId;
@@ -190,6 +191,11 @@ public final class Uploader {
             }
             if (stopped) return false;
             int status = post(f);
+            if (UploadPlan.serverBehind(status, lastReply)) {
+                skipped.add(key);
+                System.err.println("[BetterRunLogs] server does not know this mod version yet; " + key + " waits for the next launch");
+                return true;
+            }
             if (UploadPlan.isTerminal(status)) {
                 appendLedger(key);
                 ledger.add(key);
@@ -214,6 +220,7 @@ public final class Uploader {
         /** HTTP status, or -1 when the request did not complete. */
         int post(File f) {
             HttpURLConnection c = null;
+            lastReply = "";
             try {
                 c = open("POST", API + "/runs", installId);
                 inFlight = c;
@@ -228,6 +235,7 @@ public final class Uploader {
                 }
                 int status = c.getResponseCode();
                 String reply = body(c, status);
+                lastReply = reply;
                 if (status >= 300) System.err.println("[BetterRunLogs] POST " + UploadPlan.key(f) + " -> " + status + " " + reply);
                 return status;
             } catch (IOException | RuntimeException e) { // LOUD-OK: a network failure is a retryable -1

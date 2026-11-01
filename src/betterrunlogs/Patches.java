@@ -1,6 +1,5 @@
 package betterrunlogs;
 
-import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePrefixPatch;
@@ -231,7 +230,7 @@ public final class Patches {
                 if (params == null) return;
                 HashMap<Object, Object> m = (HashMap<Object, Object>) params;
                 m.put("better_run_log_id", id);
-                m.put("better_run_log_player", CardCrawlGame.playerName);
+                m.put("better_run_log_player", SteamName.get());
             });
         }
     }

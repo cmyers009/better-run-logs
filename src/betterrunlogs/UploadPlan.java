@@ -59,6 +59,11 @@ public final class UploadPlan {
         return (status >= 200 && status < 300) || status == 409 || status == 413 || status == 422;
     }
 
+    /** The server refused only because it predates this mod version: retry next launch instead of ledgering. */
+    public static boolean serverBehind(int status, String reply) {
+        return status == 422 && reply != null && reply.contains("unknown log_version");
+    }
+
     public static long backoffMs(int failures) {
         if (failures <= 0) return 0;
         long ms = BASE_BACKOFF_MS;
@@ -66,7 +71,7 @@ public final class UploadPlan {
         return Math.min(ms, MAX_BACKOFF_MS);
     }
 
-    /** Null when the gz is a finished run (run_start first, run_end last); otherwise why it is skipped. */
+    /** Null when the gz is a finished run under a Steam name (run_start first, run_end last); otherwise why it is skipped. */
     public static String logProblem(InputStream gz, long maxRawBytes) {
         try (BufferedReader r = new BufferedReader(new InputStreamReader(new GZIPInputStream(gz), StandardCharsets.UTF_8))) {
             String first = null;
@@ -82,6 +87,7 @@ public final class UploadPlan {
             }
             if (first == null) return "empty log";
             if (!first.contains("\"t\":\"run_start\"")) return "first line is not run_start";
+            if (!first.contains("\"player_name\":\"")) return "no Steam name (the run was not played through Steam)";
             if (!last.contains("\"t\":\"run_end\"")) return "no run_end line";
             return null;
         } catch (IOException e) {

@@ -9,7 +9,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.megacrit.cardcrawl.core.Settings;
 import com.megacrit.cardcrawl.helpers.FontHelper;
 import java.io.IOException;
@@ -90,8 +89,8 @@ final class SettingsPanel {
     }
 
     private static void viewStats() {
-        String name = CardCrawlGame.playerName;
-        if (name == null || name.trim().isEmpty()) {
+        String name = SteamName.get();
+        if (name == null) {
             say("No Steam name found; start the game through Steam.");
             return;
         }
