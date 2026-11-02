@@ -30,7 +30,10 @@ import java.util.zip.GZIPOutputStream;
 final class RunLog {
     static final String FORMAT_VERSION = "1";
     private static final File INPROGRESS = new File("better-run-logs/inprogress");
-    private static final File ORPHANED = new File("better-run-logs/unfinished");
+    /** Scanned by the uploader: a run retired before run_end is still a fight attempt worth keeping. */
+    private static final File ABANDONED = new File("better-run-logs/abandoned");
+    /** Where mods before 0.4.0 parked raw abandoned logs; swept into ABANDONED once per launch. */
+    private static final File LEGACY_UNFINISHED = new File("better-run-logs/unfinished");
     private static final Gson GSON = new Gson();
     private Runnable deferred;
 
@@ -94,8 +97,6 @@ final class RunLog {
         return new File(INPROGRESS, character + "_" + seed + ".jsonl");
     }
 
-    /** Called on every game start: a fresh run rotates any stale file for the same seed. */
-    /** Everything outside the seed that decides what the run offers, so a replay can reproduce it. */
     /** This mod's version from ModTheSpire.json, so a reader knows which format and fixes a log has. */
     static String modVersion() {
         for (com.evacipated.cardcrawl.modthespire.ModInfo m : com.evacipated.cardcrawl.modthespire.Loader.MODINFOS) {
@@ -104,6 +105,7 @@ final class RunLog {
         return "unknown";
     }
 
+    /** Everything outside the seed that decides what the run offers, so a replay can reproduce it. */
     private static JsonObject profile(String character) {
         JsonObject p = new JsonObject();
         p.addProperty("seed_set", Settings.seedSet);
@@ -164,6 +166,8 @@ final class RunLog {
         o.addProperty("playtime", CardCrawlGame.playtime);
         o.addProperty("wallclock_ms", System.currentTimeMillis());
         o.add("state", Snap.full());
+        // A resumed log has no act_start for the current act; a replay reads the boss from here.
+        o.addProperty("boss", AbstractDungeon.bossKey);
         emit(resumed ? "resume" : "run_start", o);
         noteRngs();
         flush();
@@ -173,10 +177,52 @@ final class RunLog {
     private static void retireStale(String character) {
         File[] stale = INPROGRESS.listFiles((d, n) -> n.startsWith(character + "_") && n.endsWith(".jsonl"));
         if (stale == null) return;
-        ORPHANED.mkdirs();
         for (File f : stale) {
-            File to = new File(ORPHANED, f.getName().replace(".jsonl", "_" + f.lastModified() + ".jsonl"));
-            if (!f.renameTo(to)) System.err.println("[BetterRunLogs] could not move stale " + f + " to " + to);
+            File dest = new File(ABANDONED, f.getName().replace(".jsonl", "_" + f.lastModified() + ".jsonl.gz"));
+            if (gzipWhole(f, dest)) offer(dest);
+        }
+    }
+
+    /** Raw logs older mods left in unfinished/ become uploadable abandoned logs; call before the uploader scans. */
+    static void sweepUnfinished() {
+        File[] raw = LEGACY_UNFINISHED.listFiles((d, n) -> n.endsWith(".jsonl"));
+        if (raw == null) return;
+        for (File f : raw) gzipWhole(f, new File(ABANDONED, f.getName() + ".gz"));
+    }
+
+    /**
+     * Gzips raw's whole rows to dest and deletes raw; false (raw kept) on any IO failure. A crash can cut the
+     * last row mid-write, so only newline-terminated rows are copied. dest appears only once whole.
+     */
+    private static boolean gzipWhole(File raw, File dest) {
+        File dir = dest.getParentFile();
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            System.err.println("[BetterRunLogs] cannot create " + dir.getAbsolutePath() + " (raw log kept at " + raw + ")");
+            return false;
+        }
+        File tmp = new File(dir, dest.getName() + ".tmp");
+        try {
+            int dropped;
+            try (InputStream in = new FileInputStream(raw);
+                    OutputStream gz = new GZIPOutputStream(new FileOutputStream(tmp))) {
+                dropped = UploadPlan.copyWholeRows(in, gz);
+            }
+            if (dropped > 0) System.out.println("[BetterRunLogs] dropped a " + dropped + "-byte partial last row of " + raw);
+            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            System.err.println("[BetterRunLogs] could not write " + dest + " (raw log kept at " + raw + "): " + e);
+            return false;
+        }
+        if (!raw.delete()) System.err.println("[BetterRunLogs] could not delete " + raw);
+        System.out.println("[BetterRunLogs] wrote " + dest.getAbsolutePath());
+        return true;
+    }
+
+    private static void offer(File gz) {
+        try {
+            Uploader.offer(gz);
+        } catch (Throwable t) { // LOUD-OK: the next launch's backfill uploads it
+            System.err.println("[BetterRunLogs] could not queue " + gz + " for upload: " + t);
         }
     }
 
@@ -267,31 +313,10 @@ final class RunLog {
         if (file == null) return;
         closeQuietly();
         String base = runFile.getName().replaceAll("\\.run$", "");
-        File dir = new File("better-run-logs", runFile.getParentFile().getName());
-        dir.mkdirs();
-        File dest = new File(dir, base + ".jsonl.gz");
-        File tmp = new File(dir, base + ".jsonl.gz.tmp");
-        try {
-            try (InputStream in = new FileInputStream(file);
-                    OutputStream gz = new GZIPOutputStream(new FileOutputStream(tmp))) {
-                byte[] buf = new byte[1 << 16];
-                int n;
-                while ((n = in.read(buf)) > 0) gz.write(buf, 0, n);
-            }
-            // The uploader scans *.jsonl.gz: a log appears there only once it is whole.
-            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            System.err.println("[BetterRunLogs] could not write " + dest + " (raw log kept at " + file + "): " + e);
-            return;
-        }
-        if (!file.delete()) System.err.println("[BetterRunLogs] could not delete " + file);
-        System.out.println("[BetterRunLogs] wrote " + dest.getAbsolutePath());
+        File dest = new File(new File("better-run-logs", runFile.getParentFile().getName()), base + ".jsonl.gz");
+        if (!gzipWhole(file, dest)) return;
         file = null;
         runId = null;
-        try {
-            Uploader.offer(dest);
-        } catch (Throwable t) { // LOUD-OK: the next launch's backfill uploads it
-            System.err.println("[BetterRunLogs] could not queue " + dest + " for upload: " + t);
-        }
+        offer(dest);
     }
 }

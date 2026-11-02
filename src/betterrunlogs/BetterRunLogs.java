@@ -55,6 +55,11 @@ public class BetterRunLogs implements StartGameSubscriber, StartActSubscriber, O
     @Override
     public void receivePostInitialize() {
         try {
+            RunLog.sweepUnfinished();
+        } catch (Throwable t) { // LOUD-OK: the raw logs stay in unfinished/ for the next launch
+            System.err.println("[BetterRunLogs] could not sweep unfinished logs: " + t);
+        }
+        try {
             Consent.init();
         } catch (Throwable t) { // LOUD-OK: uploads stay off; logging keeps running
             System.err.println("[BetterRunLogs] upload setup failed; uploads stay off: " + t);

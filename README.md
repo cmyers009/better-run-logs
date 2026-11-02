@@ -38,9 +38,11 @@ launch.
 
 If you say yes:
 
-- Each finished run's log (`better-run-logs/<CHARACTER>/*.jsonl.gz`, exactly the file on your PC) is
-  uploaded to `api.spirepilot.com` in the background. The logs already there are uploaded too.
-  Unfinished runs (`inprogress/`, `unfinished/`) are never uploaded.
+- Each run's log (`better-run-logs/<CHARACTER>/*.jsonl.gz` and `better-run-logs/abandoned/*.jsonl.gz`,
+  exactly the file on your PC) is uploaded to `api.spirepilot.com` in the background. The logs
+  already there are uploaded too. That includes runs continued from a copied save and runs you
+  abandoned after at least one fight, so every fight attempt counts; spirepilot.com shows only
+  runs played from the start to the end. A run still in progress (`inprogress/`) is not uploaded.
 - Each upload carries a random install ID made on your PC (not tied to your Steam account) and the
   mod version.
 - The logs are used to train a Slay the Spire AI.
@@ -83,7 +85,7 @@ Everything is saved inside your game folder:
 | The game's normal run history | `runs/<CHARACTER>/<timestamp>.run` |
 | **Better Run Logs, finished runs** | `better-run-logs/<CHARACTER>/<timestamp>.jsonl.gz` |
 | Run in progress (written live) | `better-run-logs/inprogress/<CHARACTER>_<seed>.jsonl` |
-| Runs abandoned without a `.run` file | `better-run-logs/unfinished/` |
+| Runs abandoned before the end (gzipped when you start the next run) | `better-run-logs/abandoned/` |
 
 A finished log has the same `<timestamp>` as its `.run` file. The `.run` file also records the
 log's `better_run_log_id`, so the two can always be matched.

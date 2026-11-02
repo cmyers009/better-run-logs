@@ -17,6 +17,9 @@ import com.megacrit.cardcrawl.potions.AbstractPotion;
 import com.megacrit.cardcrawl.powers.AbstractPower;
 import com.megacrit.cardcrawl.random.Random;
 import com.megacrit.cardcrawl.relics.AbstractRelic;
+import com.megacrit.cardcrawl.relics.BottledFlame;
+import com.megacrit.cardcrawl.relics.BottledLightning;
+import com.megacrit.cardcrawl.relics.BottledTornado;
 import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -159,9 +162,19 @@ final class Snap {
             o.addProperty("id", r.relicId);
             o.addProperty("counter", r.counter);
             if (r.grayscale) o.addProperty("used", true);
+            AbstractCard bottled = bottledCard(r);
+            if (bottled != null) o.addProperty("card_uuid", bottled.uuid.toString());
             a.add(o);
         }
         return a;
+    }
+
+    /** The deck card a bottle relic holds, so a log that starts mid-run still knows what each bottle draws. */
+    private static AbstractCard bottledCard(AbstractRelic r) {
+        if (r instanceof BottledFlame) return ((BottledFlame) r).card;
+        if (r instanceof BottledLightning) return ((BottledLightning) r).card;
+        if (r instanceof BottledTornado) return ((BottledTornado) r).card;
+        return null;
     }
 
     static JsonArray potions() {

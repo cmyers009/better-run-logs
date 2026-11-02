@@ -1,10 +1,12 @@
 package betterrunlogs;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -21,7 +23,6 @@ public final class UploadPlan {
     static final long MAX_BACKOFF_MS = 1_800_000L;
     public static final long MAX_RAW_BYTES = 40L * 1024 * 1024;
 
-    /** Ledger key: the log's path relative to better-run-logs/, e.g. "IRONCLAD/1730000000.jsonl.gz". */
     /** The main-menu prompt; it mentions logs already on the PC only when there are some. */
     public static String consentBody(boolean hasLogs) {
         return "Get bot reviews of your Heart fights on spirepilot.com, under your Steam name."
@@ -29,6 +30,7 @@ public final class UploadPlan {
                 + " Change this any time in Mods \u2192 Better Run Logs \u2192 Config.";
     }
 
+    /** Ledger key: the log's path relative to better-run-logs/, e.g. "IRONCLAD/1730000000.jsonl.gz". */
     public static String key(File log) {
         File parent = log.getParentFile();
         return (parent == null ? "" : parent.getName() + "/") + log.getName();
@@ -71,11 +73,15 @@ public final class UploadPlan {
         return Math.min(ms, MAX_BACKOFF_MS);
     }
 
-    /** Null when the gz is a finished run under a Steam name (run_start first, run_end last); otherwise why it is skipped. */
+    /**
+     * Null when the gz should upload: it opens with run_start or resume under a Steam name, and either ends with
+     * run_end or (abandoned) holds at least one fight. Otherwise why it is skipped. The server derives the kind.
+     */
     public static String logProblem(InputStream gz, long maxRawBytes) {
         try (BufferedReader r = new BufferedReader(new InputStreamReader(new GZIPInputStream(gz), StandardCharsets.UTF_8))) {
             String first = null;
             String last = null;
+            boolean fought = false;
             long raw = 0;
             String line;
             while ((line = r.readLine()) != null) {
@@ -83,15 +89,37 @@ public final class UploadPlan {
                 if (raw > maxRawBytes) return "over " + maxRawBytes + " bytes uncompressed";
                 if (line.trim().isEmpty()) continue;
                 if (first == null) first = line;
+                fought |= line.contains("\"t\":\"battle_start\"");
                 last = line;
             }
             if (first == null) return "empty log";
-            if (!first.contains("\"t\":\"run_start\"")) return "first line is not run_start";
+            if (!first.contains("\"t\":\"run_start\"") && !first.contains("\"t\":\"resume\"")) {
+                return "first line is not run_start or resume";
+            }
             if (!first.contains("\"player_name\":\"")) return "no Steam name (the run was not played through Steam)";
-            if (!last.contains("\"t\":\"run_end\"")) return "no run_end line";
+            if (!last.contains("\"t\":\"run_end\"") && !fought) return "abandoned before any fight";
             return null;
         } catch (IOException e) {
             return "unreadable gzip: " + e;
         }
+    }
+
+    /** Copies every newline-terminated row; a tail a crash cut off mid-row is dropped. Returns the bytes dropped. */
+    public static int copyWholeRows(InputStream in, OutputStream out) throws IOException {
+        ByteArrayOutputStream tail = new ByteArrayOutputStream();
+        byte[] buf = new byte[1 << 16];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            int from = 0;
+            for (int i = 0; i < n; i++) {
+                if (buf[i] != '\n') continue;
+                tail.writeTo(out);
+                tail.reset();
+                out.write(buf, from, i + 1 - from);
+                from = i + 1;
+            }
+            tail.write(buf, from, n - from);
+        }
+        return tail.size();
     }
 }

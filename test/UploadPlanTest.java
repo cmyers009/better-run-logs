@@ -21,6 +21,7 @@ public final class UploadPlanTest {
         terminalStatuses();
         backoffSequence();
         logChecks();
+        wholeRowsOnly();
         consentBodyMentionsOnlyExistingLogs();
         System.out.println("UploadPlanTest: all passed");
     }
@@ -83,13 +84,18 @@ public final class UploadPlanTest {
 
     private static void logChecks() throws IOException {
         String start = "{\"run_id\":\"x\",\"player_name\":\"Panacea\",\"t\":\"run_start\",\"seq\":0}\n";
+        String resume = "{\"run_id\":\"x\",\"player_name\":\"Panacea\",\"t\":\"resume\",\"seq\":0}\n";
         String nameless = "{\"run_id\":\"x\",\"t\":\"run_start\",\"seq\":0}\n";
-        String mid = "{\"t\":\"turn_start\",\"seq\":1}\n";
-        String end = "{\"victory\":true,\"t\":\"run_end\",\"seq\":2}\n";
+        String fight = "{\"encounter\":\"Cultist\",\"t\":\"battle_start\",\"seq\":1}\n";
+        String mid = "{\"t\":\"turn_start\",\"seq\":2}\n";
+        String end = "{\"victory\":true,\"t\":\"run_end\",\"seq\":3}\n";
         assert problem(gz(start + mid + end), 1 << 20) == null;
         assert problem(gz(start + mid + end + "\n"), 1 << 20) == null;
-        assert problem(gz(start + mid), 1 << 20).equals("no run_end line");
-        assert problem(gz(mid + end), 1 << 20).equals("first line is not run_start");
+        assert problem(gz(resume + fight + mid + end), 1 << 20) == null;
+        assert problem(gz(start + fight + mid), 1 << 20) == null;
+        assert problem(gz(resume + fight + mid), 1 << 20) == null;
+        assert problem(gz(start + mid), 1 << 20).equals("abandoned before any fight");
+        assert problem(gz(mid + end), 1 << 20).equals("first line is not run_start or resume");
         assert problem(gz(""), 1 << 20).equals("empty log");
         assert UploadPlan.serverBehind(422, "{\"error\":\"unknown log_version 0.3.1\"}");
         assert !UploadPlan.serverBehind(422, "{\"error\":\"unparseable: run_start.player_name\"}");
@@ -99,5 +105,22 @@ public final class UploadPlanTest {
         assert problem(Arrays.copyOf(full, full.length - 6), 1 << 20).startsWith("unreadable gzip");
         assert problem("not gzip".getBytes(StandardCharsets.UTF_8), 1 << 20).startsWith("unreadable gzip");
         assert problem(gz(start + mid + end), 40).equals("over 40 bytes uncompressed");
+    }
+
+    private static String copied(String raw, int[] dropped) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        dropped[0] = UploadPlan.copyWholeRows(new ByteArrayInputStream(raw.getBytes(StandardCharsets.UTF_8)), out);
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    private static void wholeRowsOnly() throws IOException {
+        int[] dropped = new int[1];
+        assert copied("{\"a\":1}\n{\"b\":2}\n", dropped).equals("{\"a\":1}\n{\"b\":2}\n") && dropped[0] == 0;
+        assert copied("{\"a\":1}\n{\"b\":{\"c\":2}", dropped).equals("{\"a\":1}\n") && dropped[0] == 12;
+        assert copied("{\"a\":", dropped).isEmpty() && dropped[0] == 5;
+        assert copied("", dropped).isEmpty() && dropped[0] == 0;
+        StringBuilder big = new StringBuilder();
+        for (int i = 0; i < 20000; i++) big.append("{\"row\":").append(i).append("}\n");
+        assert copied(big + "{\"cut", dropped).equals(big.toString()) && dropped[0] == 5;
     }
 }

@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
 
 /**
- * Uploads finished run logs on one daemon thread. Started only after the player opted in;
+ * Uploads run logs (finished, resumed, abandoned) on one daemon thread. Started only after the player opted in;
  * a file is ledgered only after a terminal status, so a crash mid-upload retries (the server dedupes).
  */
 public final class Uploader {
