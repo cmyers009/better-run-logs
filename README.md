@@ -43,8 +43,8 @@ If you say yes:
   already there are uploaded too. That includes runs continued from a copied save and runs you
   abandoned after at least one fight, so every fight attempt counts; spirepilot.com shows only
   runs played from the start to the end. A run still in progress (`inprogress/`) is not uploaded.
-- Each upload carries a random install ID made on your PC (not tied to your Steam account) and the
-  mod version.
+- Each upload carries a random install ID made on your PC (not tied to your Steam account), the
+  mod version, and the name of the save-slot profile the run was played on.
 - The logs are used to train a Slay the Spire AI.
 - spirepilot.com shows your stats and the bot's review of your Heart fights under your Steam name
   (the player name inside the log).
@@ -53,11 +53,15 @@ If you say yes:
 Change your mind any time in **Mods → Better Run Logs → Config**:
 
 - **Share runs with spirepilot.com** turns uploading on or off.
+- **Show profile <name> on spirepilot.com** (one per save-slot profile) hides or shows that
+  profile's runs on the site, including runs already uploaded and every later one. Hiding is about
+  display only: while sharing is on, a hidden profile's runs still upload (for training), but the
+  site never shows or reviews them. To stop uploading altogether, turn sharing off.
 - **View my stats** opens your page on spirepilot.com.
 - **Remove my runs from the site** turns sharing off and hides every run uploaded from this install
   from spirepilot.com.
 
-The choice and install ID live in ModTheSpire's config for this mod; `better-run-logs/uploaded.ledger`
+The choices, hidden profiles and install ID live in ModTheSpire's config for this mod; `better-run-logs/uploaded.ledger`
 lists which logs were already sent.
 
 ## Install

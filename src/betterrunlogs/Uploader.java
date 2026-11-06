@@ -1,5 +1,7 @@
 package betterrunlogs;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -15,6 +17,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -116,6 +119,58 @@ public final class Uploader {
         }
     }
 
+    /** First row of a log, or null when it cannot be read. */
+    static String firstRowOf(File f) {
+        try (InputStream in = new FileInputStream(f)) {
+            return UploadPlan.firstRow(in);
+        } catch (IOException | RuntimeException e) { // LOUD-OK: an unreadable log names no profile; its upload reports the problem
+            System.err.println("[BetterRunLogs] could not read " + f + ": " + e);
+            return null;
+        }
+    }
+
+    static String profileOf(File f, String[] slots) {
+        return UploadPlan.profileOf(firstRowOf(f), f.getParentFile().getName(), slots);
+    }
+
+    /** run_ids of the local logs played on one profile, so the site can name runs uploaded before 0.5.0. */
+    static Set<String> runKeysOf(String profile, String[] slots) {
+        Set<String> out = new LinkedHashSet<>();
+        for (File f : scanLogs()) {
+            String row = firstRowOf(f);
+            if (!profile.equals(UploadPlan.profileOf(row, f.getParentFile().getName(), slots))) continue;
+            String id = UploadPlan.jsonString(row, "run_id");
+            if (id != null) out.add(id);
+        }
+        return out;
+    }
+
+    /** Tells the site to hide or show one profile's runs; the reply is a line for the player. */
+    static String putProfile(String installId, String profile, boolean hidden, String[] slots) throws IOException {
+        byte[] body = UploadPlan.profileBody(profile, hidden, runKeysOf(profile, slots)).getBytes(StandardCharsets.UTF_8);
+        HttpURLConnection c = open("PUT", API + "/installs/" + installId + "/profiles", installId);
+        try {
+            c.setDoOutput(true);
+            c.setRequestProperty("Content-Type", "application/json");
+            c.setFixedLengthStreamingMode(body.length);
+            try (OutputStream out = c.getOutputStream()) {
+                out.write(body);
+            }
+            int status = c.getResponseCode();
+            String reply = body(c, status);
+            if (status == 429) return "Too many changes this hour; try again later.";
+            if (status != 200) {
+                System.err.println("[BetterRunLogs] PUT profile -> " + status + " " + reply);
+                return "Could not update the site (HTTP " + status + ").";
+            }
+            JsonElement n = new JsonParser().parse(reply).getAsJsonObject().get("runs");
+            if (n == null) return "The site gave an unexpected reply; try again later.";
+            return n.getAsInt() + " uploaded runs from " + profile + " are now " + (hidden ? "hidden on" : "shown on") + " spirepilot.com.";
+        } finally {
+            c.disconnect();
+        }
+    }
+
     private static final class Worker implements Runnable {
         final String installId;
         final LinkedBlockingDeque<File> queue = new LinkedBlockingDeque<>();
@@ -124,12 +179,27 @@ public final class Uploader {
         volatile Thread thread;
         volatile HttpURLConnection inFlight;
         Set<String> ledger = new HashSet<>();
+        final Set<String> hiddenAtStart;
         int failures;
         int uploaded;
         String lastReply = "";
 
         Worker(String installId) {
             this.installId = installId;
+            this.hiddenAtStart = Consent.hiddenProfiles();
+        }
+
+        /** A profile hidden while sharing was off, or before its runs were named, is told to the site first. */
+        void syncHidden() {
+            String[] slots = Consent.slotNames();
+            for (String p : hiddenAtStart) {
+                if (stopped) return;
+                try {
+                    System.out.println("[BetterRunLogs] " + putProfile(installId, p, true, slots));
+                } catch (Throwable t) { // LOUD-OK: retried next launch; the server also hides new uploads from this profile
+                    System.err.println("[BetterRunLogs] could not hide profile " + p + " on the site: " + t);
+                }
+            }
         }
 
         void halt() {
@@ -152,6 +222,7 @@ public final class Uploader {
 
         @Override
         public void run() {
+            syncHidden();
             try {
                 ledger = readLedger();
                 List<File> pending = UploadPlan.pending(scanLogs(), ledger);
@@ -227,6 +298,8 @@ public final class Uploader {
                 if (stopped) return -1;
                 c.setDoOutput(true);
                 c.setRequestProperty("Content-Type", "application/gzip");
+                String profile = profileOf(f, Consent.slotNames());
+                if (profile != null) c.setRequestProperty("X-Profile-Name", UploadPlan.encodeHeader(profile));
                 c.setFixedLengthStreamingMode(f.length());
                 try (InputStream in = new FileInputStream(f); OutputStream out = c.getOutputStream()) {
                     byte[] buf = new byte[1 << 16];

@@ -5,6 +5,7 @@ import basemod.ModLabel;
 import basemod.ModLabeledButton;
 import basemod.ModLabeledToggleButton;
 import basemod.ModPanel;
+import basemod.ModToggleButton;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.google.gson.JsonElement;
@@ -15,8 +16,9 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URLEncoder;
+import java.util.Set;
 
-/** Mods -> Better Run Logs -> Config: the sharing toggle, the stats link, and removing your runs from the site. */
+/** Mods -> Better Run Logs -> Config: the sharing toggle, one show/hide toggle per save-slot profile, the stats link, and removal. */
 final class SettingsPanel {
     private SettingsPanel() {}
 
@@ -29,6 +31,7 @@ final class SettingsPanel {
     private static ModLabel status;
     private static boolean confirming;
     private static volatile boolean removing;
+    private static final Object PROFILE_LOCK = new Object();
 
     static ModPanel build() {
         ModPanel panel = new ModPanel();
@@ -37,10 +40,19 @@ final class SettingsPanel {
         Consent.toggle = share.toggle;
         panel.addUIElement(share);
         panel.addUIElement(new ModLabel("Your logs are saved on your PC in better-run-logs/.",
-                380f, 640f, Settings.CREAM_COLOR, FontHelper.tipBodyFont, panel, l -> {}));
-        panel.addUIElement(new ModLabeledButton("View my stats", 380f, 520f, panel, b -> viewStats()));
-        panel.addUIElement(new ModLabeledButton("Remove my runs from the site", 380f, 400f, panel, b -> confirming = true));
-        status = new ModLabel("", 380f, 330f, Settings.CREAM_COLOR, FontHelper.tipBodyFont, panel, l -> {});
+                380f, 650f, Settings.CREAM_COLOR, FontHelper.tipBodyFont, panel, l -> {}));
+        Set<String> hidden = Consent.hiddenProfiles();
+        float y = 590f;
+        for (String name : Consent.slotNames()) {
+            if (!UploadPlan.validProfile(name)) continue;
+            panel.addUIElement(new ModLabeledToggleButton("Show profile " + name + " on spirepilot.com", 380f, y,
+                    Settings.CREAM_COLOR, FontHelper.charDescFont, !hidden.contains(name), panel, l -> {},
+                    b -> profileToggled(name, b.enabled, b)));
+            y -= 45f;
+        }
+        panel.addUIElement(new ModLabeledButton("View my stats", 380f, 420f, panel, b -> viewStats()));
+        panel.addUIElement(new ModLabeledButton("Remove my runs from the site", 380f, 340f, panel, b -> confirming = true));
+        status = new ModLabel("", 380f, 280f, Settings.CREAM_COLOR, FontHelper.tipBodyFont, panel, l -> {});
         panel.addUIElement(status);
         panel.addUIElement(new ConfirmRemove());
         return panel;
@@ -86,6 +98,34 @@ final class SettingsPanel {
             return;
         }
         say(on ? "Sharing on: your runs upload in the background." : "Sharing off: nothing more is uploaded.");
+    }
+
+    /** Hidden is display-only: the profile's runs still upload when sharing is on, but the site never shows them. */
+    private static void profileToggled(String name, boolean show, ModToggleButton b) {
+        if (!Consent.setProfileHidden(name, !show)) {
+            b.enabled = !show;
+            say("Settings could not be loaded (see the log).");
+            return;
+        }
+        if (!Consent.enabled() && Uploader.LEDGER.length() == 0) {
+            say("Saved. Applies to the site once sharing is on.");
+            return;
+        }
+        String id = Consent.installId();
+        say((show ? "Showing " : "Hiding ") + name + " on spirepilot.com...");
+        Thread t = new Thread(() -> {
+            synchronized (PROFILE_LOCK) {
+                boolean hidden = Consent.hiddenProfiles().contains(name);
+                try {
+                    say(Uploader.putProfile(id, name, hidden, Consent.slotNames()));
+                } catch (Throwable e) { // LOUD-OK: shown to the player; the choice is saved and re-sent next launch
+                    say("Could not reach the site (" + e.getMessage() + ")" + (hidden
+                            ? "; saved, retried when sharing is on." : "; saved, try again later."));
+                }
+            }
+        }, "BetterRunLogs-profile");
+        t.setDaemon(true);
+        t.start();
     }
 
     private static void viewStats() {

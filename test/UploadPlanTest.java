@@ -23,6 +23,7 @@ public final class UploadPlanTest {
         logChecks();
         wholeRowsOnly();
         consentBodyMentionsOnlyExistingLogs();
+        profileHelpers();
         System.out.println("UploadPlanTest: all passed");
     }
 
@@ -122,5 +123,60 @@ public final class UploadPlanTest {
         StringBuilder big = new StringBuilder();
         for (int i = 0; i < 20000; i++) big.append("{\"row\":").append(i).append("}\n");
         assert copied(big + "{\"cut", dropped).equals(big.toString()) && dropped[0] == 5;
+    }
+
+    private static void profileHelpers() throws IOException {
+        assert UploadPlan.validProfile("A");
+        assert UploadPlan.validProfile("Pan acea \u00dcn\u00efcode");
+        assert !UploadPlan.validProfile(null) && !UploadPlan.validProfile("");
+        assert !UploadPlan.validProfile("a\tb") && !UploadPlan.validProfile("a\u007fb");
+        assert UploadPlan.validProfile(new String(new char[64]).replace('\0', 'x'));
+        assert !UploadPlan.validProfile(new String(new char[65]).replace('\0', 'x'));
+
+        assert UploadPlan.encodeHeader("Pan acea+%").equals("Pan%20acea%2B%25") : UploadPlan.encodeHeader("Pan acea+%");
+        assert UploadPlan.encodeHeader("\u00dc").equals("%C3%9C");
+
+        String row = "{\"run_id\":\"abcd1234-run\",\"player_name\":\"elf\",\"profile_name\":\"a \\\"q\\\" \\\\ \\u00dc\\n\",\"t\":\"run_start\"}";
+        assert "abcd1234-run".equals(UploadPlan.jsonString(row, "run_id"));
+        assert "a \"q\" \\ \u00dc\n".equals(UploadPlan.jsonString(row, "profile_name")) : UploadPlan.jsonString(row, "profile_name");
+        assert UploadPlan.jsonString(row, "missing") == null;
+        assert UploadPlan.jsonString("{\"k\":\"cut", "k") == null;
+        assert UploadPlan.jsonString("{\"k\":\"bad\\u00z1\"}", "k") == null;
+        assert UploadPlan.jsonString("{\"k\":\"short\\u00\"}", "k") == null;
+        assert UploadPlan.jsonString(null, "k") == null;
+
+        assert UploadPlan.firstRow(new ByteArrayInputStream(gz("\n  \n{\"a\":1}\n{\"b\":2}\n"))).equals("{\"a\":1}");
+        assert UploadPlan.firstRow(new ByteArrayInputStream(gz("\n"))) == null;
+
+        assert UploadPlan.slotOfDir("IRONCLAD") == 0 && UploadPlan.slotOfDir("1_IRONCLAD") == 1 && UploadPlan.slotOfDir("2_WATCHER") == 2;
+        assert UploadPlan.slotOfDir("abandoned") == -1 && UploadPlan.slotOfDir("inprogress") == -1 && UploadPlan.slotOfDir("unfinished") == -1;
+        assert UploadPlan.slotOfDir("3_IRONCLAD") == 0;
+
+        String[] slots = {"Main", "offline", ""};
+        String tagged = "{\"profile_name\":\"offline\",\"t\":\"run_start\"}";
+        String untagged = "{\"t\":\"run_start\"}";
+        assert "offline".equals(UploadPlan.profileOf(tagged, "IRONCLAD", slots));
+        assert UploadPlan.profileOf("{\"profile_name\":\"\"}", "IRONCLAD", slots) == null;
+        assert "Main".equals(UploadPlan.profileOf(untagged, "IRONCLAD", slots));
+        assert "offline".equals(UploadPlan.profileOf(untagged, "1_IRONCLAD", slots));
+        assert UploadPlan.profileOf(untagged, "2_IRONCLAD", slots) == null;
+        assert UploadPlan.profileOf(untagged, "abandoned", slots) == null;
+        assert "offline".equals(UploadPlan.profileOf(tagged, "abandoned", slots));
+        assert UploadPlan.profileOf(untagged, "IRONCLAD", null) == null;
+
+        assert UploadPlan.jsonQuote("a\"b\\c\n\u2028").equals("\"a\\\"b\\\\c\\u000a\\u2028\"") : UploadPlan.jsonQuote("a\"b\\c\n\u2028");
+        assert UploadPlan.profileBody("off \"x\"", true, Arrays.asList("abcd1234-run", "bad key!", "abcd1234-run", null, "short"))
+                .equals("{\"profile\":\"off \\\"x\\\"\",\"hidden\":true,\"run_keys\":[\"abcd1234-run\"]}")
+                : UploadPlan.profileBody("off \"x\"", true, Arrays.asList("abcd1234-run", "bad key!", "abcd1234-run", null, "short"));
+        assert UploadPlan.profileBody("p", false, new ArrayList<>()).equals("{\"profile\":\"p\",\"hidden\":false,\"run_keys\":[]}");
+        List<String> many = new ArrayList<>();
+        for (int i = 0; i < 6000; i++) many.add(String.format("run-%08d", i));
+        String body = UploadPlan.profileBody("p", true, many);
+        assert body.split(",").length - 2 == UploadPlan.MAX_PROFILE_RUN_KEYS : body.split(",").length;
+
+        assert UploadPlan.parseHiddenProfiles(null).isEmpty();
+        assert UploadPlan.parseHiddenProfiles("b\n\na\nb").equals(new HashSet<>(Arrays.asList("a", "b")));
+        assert UploadPlan.joinHiddenProfiles(Arrays.asList("b", "a")).equals("a\nb");
+        assert UploadPlan.parseHiddenProfiles(UploadPlan.joinHiddenProfiles(Arrays.asList("x y", "\u00dc"))).equals(new HashSet<>(Arrays.asList("x y", "\u00dc")));
     }
 }

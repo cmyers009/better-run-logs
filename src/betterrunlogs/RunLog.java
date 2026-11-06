@@ -152,6 +152,7 @@ final class RunLog {
         o.addProperty("format", FORMAT_VERSION);
         o.addProperty("run_id", runId);
         o.addProperty("player_name", SteamName.get());
+        o.addProperty("profile_name", CardCrawlGame.playerName);
         o.addProperty("seed", Settings.seed);
         o.addProperty("seed_str", com.megacrit.cardcrawl.helpers.SeedHelper.getString(Settings.seed));
         o.addProperty("character", character);
